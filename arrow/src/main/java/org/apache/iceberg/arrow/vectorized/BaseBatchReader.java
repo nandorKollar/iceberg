@@ -20,6 +20,9 @@ package org.apache.iceberg.arrow.vectorized;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.commons.compress.utils.Sets;
 import org.apache.iceberg.parquet.VectorizedReader;
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
@@ -69,6 +72,18 @@ public abstract class BaseBatchReader<T> implements VectorizedReader<T> {
       }
     }
     closeVectors();
+    Set<BufferAllocator> allocators = Sets.newHashSet();
+    for (VectorizedArrowReader reader : readers) {
+      allocators.add(reader.getRootAlloc());
+    }
+
+    for (BufferAllocator allocator : allocators) {
+      //      try {
+      allocator.close();
+      //      }catch (IllegalStateException e) {
+      //        System.out.println(e);
+      //      }
+    }
   }
 
   @Override

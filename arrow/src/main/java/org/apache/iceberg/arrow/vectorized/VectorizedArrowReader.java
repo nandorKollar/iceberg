@@ -69,7 +69,7 @@ public class VectorizedArrowReader implements VectorizedReader<VectorHolder> {
   private final ColumnDescriptor columnDescriptor;
   private final VectorizedColumnIterator vectorizedColumnIterator;
   private final Types.NestedField icebergField;
-  private final BufferAllocator rootAlloc;
+  protected final BufferAllocator rootAlloc;
 
   private int batchSize;
   private FieldVector vec;
@@ -83,6 +83,10 @@ public class VectorizedArrowReader implements VectorizedReader<VectorHolder> {
   // data
   // present in the vector may not necessarily be dictionary encoded.
   private Dictionary dictionary;
+
+  public BufferAllocator getRootAlloc() {
+    return rootAlloc;
+  }
 
   public VectorizedArrowReader(
       ColumnDescriptor desc,
@@ -644,7 +648,7 @@ public class VectorizedArrowReader implements VectorizedReader<VectorHolder> {
     public VectorHolder read(VectorHolder reuse, int numValsToRead) {
       FieldVector vec;
       if (reuse == null) {
-        vec = newVector(batchSize);
+        vec = VectorizedArrowReader.allocateBigIntVector(ROW_POSITION_ARROW_FIELD, batchSize, rootAlloc);
       } else {
         vec = reuse.vector();
         vec.setValueCount(0);
@@ -666,13 +670,6 @@ public class VectorizedArrowReader implements VectorizedReader<VectorHolder> {
       vec.setValueCount(numValsToRead);
 
       return new VectorHolder.PositionVectorHolder(vec, MetadataColumns.ROW_POSITION, nulls);
-    }
-
-    private static BigIntVector newVector(int valueCount) {
-      BigIntVector vector =
-          (BigIntVector) ROW_POSITION_ARROW_FIELD.createVector(ArrowAllocation.rootAllocator());
-      vector.allocateNew(valueCount);
-      return vector;
     }
 
     @Override
@@ -732,7 +729,7 @@ public class VectorizedArrowReader implements VectorizedReader<VectorHolder> {
         ArrowVectorAccessor<?, String, ?, ?> idsAccessor =
             ids == null ? null : ArrowVectorAccessors.getVectorAccessor(idsHolder);
 
-        BigIntVector rowIds = allocateBigIntVector(ROW_ID_ARROW_FIELD, numValsToRead);
+        BigIntVector rowIds = allocateBigIntVector(ROW_ID_ARROW_FIELD, numValsToRead, rootAlloc);
         ArrowBuf dataBuffer = rowIds.getDataBuffer();
         for (int i = 0; i < numValsToRead; i += 1) {
           long bufferOffset = (long) i * Long.BYTES;
@@ -805,7 +802,7 @@ public class VectorizedArrowReader implements VectorizedReader<VectorHolder> {
             seqNumbers == null ? null : ArrowVectorAccessors.getVectorAccessor(seqNumbersHolder);
 
         BigIntVector lastUpdatedSequenceNumbers =
-            allocateBigIntVector(LAST_UPDATED_SEQ, numValsToRead);
+            allocateBigIntVector(LAST_UPDATED_SEQ, numValsToRead,rootAlloc);
         ArrowBuf dataBuffer = lastUpdatedSequenceNumbers.getDataBuffer();
         for (int i = 0; i < numValsToRead; i += 1) {
           long bufferOffset = (long) i * Long.BYTES;
@@ -852,8 +849,8 @@ public class VectorizedArrowReader implements VectorizedReader<VectorHolder> {
     return holder.nullabilityHolder().isNullAt(index) == 1;
   }
 
-  private static BigIntVector allocateBigIntVector(Field field, int valueCount) {
-    BigIntVector vector = (BigIntVector) field.createVector(ArrowAllocation.rootAllocator());
+  private static BigIntVector allocateBigIntVector(Field field, int valueCount, BufferAllocator allocator) {
+    BigIntVector vector = (BigIntVector) field.createVector(allocator);
     vector.allocateNew(valueCount);
     return vector;
   }
